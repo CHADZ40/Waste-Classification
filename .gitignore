@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets
+.env
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Datasets: too large for git. Split CSVs in data/splits/ ARE committed.
+data/raw/*
+!data/raw/.gitkeep
+
+# Model weights
+models/*
+!models/.gitkeep
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.safetensors
+
+# Training runs and experiment trackers
+outputs/*
+!outputs/.gitkeep
+wandb/
+mlruns/
+lightning_logs/
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

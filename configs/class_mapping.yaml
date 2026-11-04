@@ -1,0 +1,35 @@
+# Regrouping of the dataset's 30 categories into 4 target classes (proposal section 7.1).
+Hazardous:
+  - aerosol_cans
+Non-Recyclable:
+  - disposable_plastic_cutlery
+  - paper_cups
+  - plastic_cup_lids
+  - plastic_shopping_bags
+  - plastic_straws
+  - plastic_trash_bags
+  - styrofoam_cups
+  - styrofoam_food_containers
+Organic:
+  - coffee_grounds
+  - eggshells
+  - food_waste
+  - tea_bags
+Recyclable:
+  - aluminum_food_cans
+  - aluminum_soda_cans
+  - cardboard_boxes
+  - cardboard_packaging
+  - clothing
+  - glass_beverage_bottles
+  - glass_cosmetic_containers
+  - glass_food_jars
+  - magazines
+  - newspaper
+  - office_paper
+  - plastic_detergent_bottles
+  - plastic_food_containers
+  - plastic_soda_bottles
+  - plastic_water_bottles
+  - shoes
+  - steel_food_cans

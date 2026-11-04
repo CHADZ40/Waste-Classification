@@ -1,0 +1,10 @@
+# Model A: compact CNN trained from scratch.
+extends: default.yaml
+experiment: basic_cnn
+
+model:
+  name: basic_cnn
+  pretrained: false
+
+train:
+  lr: 0.001

@@ -1,0 +1,10 @@
+# Model B: ImageNet-pretrained backbone. The head trains first, then the whole network.
+extends: default.yaml
+experiment: transfer
+
+model:
+  name: efficientnet_b0   # any timm model, e.g. mobilenetv3_large_100 or resnet50
+  pretrained: true
+
+train:
+  freeze_epochs: 3

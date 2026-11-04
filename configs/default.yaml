@@ -1,0 +1,28 @@
+# Shared settings. Experiment configs use `extends: default.yaml` and override what differs.
+seed: 42
+
+data:
+  raw_dir: data/raw
+  manifest: data/splits/manifest.csv
+  class_mapping: configs/class_mapping.yaml
+  val_size: 0.15
+  test_size: 0.15
+  train_domains: [default]   # image types used for training and validation
+  image_size: 224
+  batch_size: 32
+  num_workers: 4
+
+train:
+  epochs: 30
+  lr: 0.0003
+  weight_decay: 0.0001
+  label_smoothing: 0.1
+  class_weights: true        # offsets the small Hazardous class
+  freeze_epochs: 0           # train only the classifier head for this many epochs
+  patience: 7                # stop after this many epochs without a better val macro F1
+  init_checkpoint: null      # continue from an existing checkpoint
+
+output:
+  models_dir: models
+  runs_dir: outputs/runs
+  reports_dir: reports

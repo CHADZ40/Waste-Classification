@@ -1,0 +1,13 @@
+# Optional Step 7 (RQ3): continue Model B with real_world images mixed in.
+# The real_world test images stay held out.
+extends: transfer.yaml
+experiment: transfer_real_world
+
+data:
+  train_domains: [default, real_world]
+
+train:
+  epochs: 10
+  lr: 0.0001
+  freeze_epochs: 0
+  init_checkpoint: models/transfer.pt
