@@ -33,6 +33,6 @@ def build_app(checkpoint: str) -> gr.Interface:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoint", default="models/transfer.pt")
+    parser.add_argument("--checkpoint", default="models/transfer_large.pt")
     args = parser.parse_args()
     build_app(args.checkpoint).launch()

@@ -21,12 +21,15 @@ from waste_classifier.model import (
 from waste_classifier.utils import checkpoint_path, get_device, load_config, seed_everything
 
 
-def balanced_class_weights(labels: pd.Series, classes: list[str]) -> torch.Tensor:
-    """Weight each class inversely to its frequency in the training labels."""
+def balanced_class_weights(
+    labels: pd.Series, classes: list[str], power: float = 1.0
+) -> torch.Tensor:
+    """Weight classes by inverse frequency; a power below 1 softens the weighting."""
     counts = labels.value_counts().reindex(classes)
     if counts.isna().any():
         raise ValueError(f"Training data has no images for: {list(counts[counts.isna()].index)}")
-    return torch.tensor((len(labels) / (len(classes) * counts)).values, dtype=torch.float32)
+    weights = (len(labels) / (len(classes) * counts)) ** power
+    return torch.tensor(weights.values, dtype=torch.float32)
 
 
 def train(cfg: dict) -> float:
@@ -47,9 +50,9 @@ def train(cfg: dict) -> float:
         model = build_model(cfg["model"]["name"], len(classes), cfg["model"]["pretrained"])
         model = model.to(device)
 
-    weights = None
-    if hp["class_weights"]:
-        weights = balanced_class_weights(train_loader.dataset.df["label"], classes).to(device)
+    train_labels = train_loader.dataset.df["label"]
+    weights = balanced_class_weights(train_labels, classes, hp["class_weight_power"]).to(device)
+    print(f"Class weights: {dict(zip(classes, weights.round(decimals=2).tolist(), strict=True))}")
     criterion = nn.CrossEntropyLoss(weight=weights, label_smoothing=hp["label_smoothing"])
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=hp["lr"], weight_decay=hp["weight_decay"]

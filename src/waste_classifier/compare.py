@@ -12,17 +12,19 @@ def compare(reports_dir: Path) -> pd.DataFrame:
     for path in sorted(reports_dir.glob("*/metrics.json")):
         results = json.loads(path.read_text())
         default, real_world = results["default"], results["real_world"]
+        real_world_all = results.get("real_world_all", {})
+        gap = results.get("gap_all", results["gap"])
         rows.append(
             {
                 "experiment": path.parent.name,
                 "default_macro_f1": default["macro_f1"],
-                "real_world_macro_f1": real_world["macro_f1"],
-                "macro_f1_drop": results["gap"]["macro_f1_drop"],
-                "default_balanced_acc": default["balanced_accuracy"],
-                "real_world_balanced_acc": real_world["balanced_accuracy"],
+                "real_world_all_macro_f1": real_world_all.get("macro_f1"),
+                "real_world_test_macro_f1": real_world["macro_f1"],
                 "default_acc": default["accuracy"],
-                "real_world_acc": real_world["accuracy"],
-                "most_affected_class": next(iter(results["gap"]["per_class_f1_drop"])),
+                "real_world_all_acc": real_world_all.get("accuracy"),
+                "real_world_test_acc": real_world["accuracy"],
+                "macro_f1_drop": gap["macro_f1_drop"],
+                "most_affected_class": next(iter(gap["per_class_f1_drop"])),
             }
         )
     if not rows:

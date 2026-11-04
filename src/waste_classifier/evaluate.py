@@ -1,4 +1,10 @@
-"""Score a trained experiment on the default and real_world test sets.
+"""Score a trained experiment on its test sets.
+
+- default: held-out studio images.
+- real_world: held-out real_world images, comparable across every experiment (RQ3).
+- real_world_all: every real_world image, for models that never trained on them (RQ1, RQ2).
+
+Near-copies of images a model could have trained on are left out of every test set.
 
 Writes metrics.json, predictions.csv and one confusion matrix per test set to
 reports/<experiment>/.
@@ -25,8 +31,18 @@ from torch import nn
 from waste_classifier.data import build_dataloader, load_subset
 from waste_classifier.engine import run_epoch
 from waste_classifier.model import load_checkpoint
-from waste_classifier.split import DOMAINS
 from waste_classifier.utils import checkpoint_path, get_device, load_config
+
+
+def build_test_sets(cfg: dict) -> dict[str, tuple[str, list[str], str]]:
+    """Map each test set name to its split, image types and near-copy exclusion column."""
+    sets = {
+        "default": ("test", ["default"], "near_any"),
+        "real_world": ("test", ["real_world"], "near_any"),
+    }
+    if "real_world" not in cfg["data"]["train_domains"]:
+        sets["real_world_all"] = ("all", ["real_world"], "near_studio")
+    return sets
 
 
 def compute_metrics(y_true: list[int], y_pred: list[int], classes: list[str]) -> dict:
@@ -89,29 +105,35 @@ def evaluate(cfg: dict) -> dict:
     majority = classes.index(train_labels.mode()[0])
 
     results, predictions = {}, []
-    for domain in DOMAINS:
-        loader = build_dataloader(cfg, "test", [domain])
+    sets = build_test_sets(cfg)
+    for name, (split, domains, exclude) in sets.items():
+        loader = build_dataloader(cfg, split, domains, exclude)
         _, y_true, y_pred = run_epoch(model, loader, nn.CrossEntropyLoss(), device)
-        results[domain] = compute_metrics(y_true, y_pred, classes)
-        results[domain]["majority_baseline"] = compute_metrics(
+        results[name] = compute_metrics(y_true, y_pred, classes)
+        results[name]["majority_baseline"] = compute_metrics(
             y_true, [majority] * len(y_true), classes
         )
-        save_confusion_matrix(y_true, y_pred, classes, report_dir / f"confusion_{domain}.png")
-        predictions.append(loader.dataset.df.assign(pred=[classes[i] for i in y_pred]))
+        save_confusion_matrix(y_true, y_pred, classes, report_dir / f"confusion_{name}.png")
+        predictions.append(
+            loader.dataset.df.assign(test_set=name, pred=[classes[i] for i in y_pred])
+        )
 
     results["gap"] = compute_gap(results["default"], results["real_world"])
+    if "real_world_all" in sets:
+        results["gap_all"] = compute_gap(results["default"], results["real_world_all"])
     (report_dir / "metrics.json").write_text(json.dumps(results, indent=2))
     pd.concat(predictions).to_csv(report_dir / "predictions.csv", index=False)
 
-    for domain in DOMAINS:
-        scores = results[domain]
+    for name in sets:
+        scores = results[name]
         print(
-            f"{domain:<11} macro F1 {scores['macro_f1']:.4f} "
+            f"{name:<15} macro F1 {scores['macro_f1']:.4f} "
             f"| balanced acc {scores['balanced_accuracy']:.4f} "
             f"| acc {scores['accuracy']:.4f} "
             f"| majority macro F1 {scores['majority_baseline']['macro_f1']:.4f}"
         )
-    print(f"Macro F1 drop: {results['gap']['macro_f1_drop']:.4f} | saved to {report_dir}")
+    gap = results.get("gap_all", results["gap"])
+    print(f"Macro F1 drop: {gap['macro_f1_drop']:.4f} | saved to {report_dir}")
     return results
 
 

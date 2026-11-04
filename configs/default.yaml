@@ -7,6 +7,7 @@ data:
   class_mapping: configs/class_mapping.yaml
   val_size: 0.15
   test_size: 0.15
+  near_duplicate_rmse: 0.03   # test images closer than this to training images are excluded
   train_domains: [default]   # image types used for training and validation
   image_size: 224
   batch_size: 32
@@ -17,7 +18,7 @@ train:
   lr: 0.0003
   weight_decay: 0.0001
   label_smoothing: 0.1
-  class_weights: true        # offsets the small Hazardous class
+  class_weight_power: 0.5    # 0 = no weighting, 1 = full inverse frequency
   freeze_epochs: 0           # train only the classifier head for this many epochs
   patience: 7                # stop after this many epochs without a better val macro F1
   init_checkpoint: null      # continue from an existing checkpoint

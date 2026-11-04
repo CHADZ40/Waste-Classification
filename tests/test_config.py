@@ -32,6 +32,15 @@ def test_class_weights_favor_rare_classes():
     assert weights[1] == pytest.approx(3 * weights[0])
 
 
+def test_class_weight_power_softens_the_weighting():
+    labels = pd.Series(["a"] * 90 + ["b"] * 10)
+    softened = balanced_class_weights(labels, ["a", "b"], power=0.5)
+    assert softened[1] == pytest.approx(3 * softened[0])
+
+    unweighted = balanced_class_weights(labels, ["a", "b"], power=0)
+    assert unweighted.tolist() == [1, 1]
+
+
 def test_class_weights_reject_a_missing_class():
     with pytest.raises(ValueError, match="b"):
         balanced_class_weights(pd.Series(["a", "a"]), ["a", "b"])

@@ -1,0 +1,206 @@
+{
+  "default": {
+    "macro_f1": 0.9156916582612871,
+    "balanced_accuracy": 0.9326450577161497,
+    "accuracy": 0.9405063291139241,
+    "per_class": {
+      "Hazardous": {
+        "precision": 0.8125,
+        "recall": 0.9629629629629629,
+        "f1": 0.8813559322033898,
+        "support": 27
+      },
+      "Non-Recyclable": {
+        "precision": 0.9120879120879121,
+        "recall": 0.9171270718232044,
+        "f1": 0.9146005509641874,
+        "support": 181
+      },
+      "Organic": {
+        "precision": 0.9191919191919192,
+        "recall": 0.8921568627450981,
+        "f1": 0.9054726368159204,
+        "support": 102
+      },
+      "Recyclable": {
+        "precision": 0.9643605870020965,
+        "recall": 0.9583333333333334,
+        "f1": 0.9613375130616509,
+        "support": 480
+      }
+    },
+    "majority_baseline": {
+      "macro_f1": 0.1889763779527559,
+      "balanced_accuracy": 0.25,
+      "accuracy": 0.6075949367088608,
+      "per_class": {
+        "Hazardous": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 27
+        },
+        "Non-Recyclable": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 181
+        },
+        "Organic": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 102
+        },
+        "Recyclable": {
+          "precision": 0.6075949367088608,
+          "recall": 1.0,
+          "f1": 0.7559055118110236,
+          "support": 480
+        }
+      }
+    }
+  },
+  "real_world": {
+    "macro_f1": 0.7893917586046248,
+    "balanced_accuracy": 0.8138725273697145,
+    "accuracy": 0.8727634194831014,
+    "per_class": {
+      "Hazardous": {
+        "precision": 0.5714285714285714,
+        "recall": 0.6666666666666666,
+        "f1": 0.6153846153846154,
+        "support": 12
+      },
+      "Non-Recyclable": {
+        "precision": 0.9,
+        "recall": 0.8048780487804879,
+        "f1": 0.8497854077253219,
+        "support": 123
+      },
+      "Organic": {
+        "precision": 0.704225352112676,
+        "recall": 0.8771929824561403,
+        "f1": 0.78125,
+        "support": 57
+      },
+      "Recyclable": {
+        "precision": 0.9155844155844156,
+        "recall": 0.9067524115755627,
+        "f1": 0.9111470113085622,
+        "support": 311
+      }
+    },
+    "majority_baseline": {
+      "macro_f1": 0.19103194103194104,
+      "balanced_accuracy": 0.25,
+      "accuracy": 0.6182902584493042,
+      "per_class": {
+        "Hazardous": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 12
+        },
+        "Non-Recyclable": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 123
+        },
+        "Organic": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 57
+        },
+        "Recyclable": {
+          "precision": 0.6182902584493042,
+          "recall": 1.0,
+          "f1": 0.7641277641277642,
+          "support": 311
+        }
+      }
+    }
+  },
+  "real_world_all": {
+    "macro_f1": 0.775419372398327,
+    "balanced_accuracy": 0.7980830339872893,
+    "accuracy": 0.8672911787665886,
+    "per_class": {
+      "Hazardous": {
+        "precision": 0.5272727272727272,
+        "recall": 0.6444444444444445,
+        "f1": 0.58,
+        "support": 90
+      },
+      "Non-Recyclable": {
+        "precision": 0.9092122830440588,
+        "recall": 0.737012987012987,
+        "f1": 0.8141063956963539,
+        "support": 924
+      },
+      "Organic": {
+        "precision": 0.7204502814258912,
+        "recall": 0.8888888888888888,
+        "f1": 0.7958549222797927,
+        "support": 432
+      },
+      "Recyclable": {
+        "precision": 0.9016727866177071,
+        "recall": 0.9219858156028369,
+        "f1": 0.9117161716171617,
+        "support": 2397
+      }
+    },
+    "majority_baseline": {
+      "macro_f1": 0.1920673076923077,
+      "balanced_accuracy": 0.25,
+      "accuracy": 0.6237314597970336,
+      "per_class": {
+        "Hazardous": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 90
+        },
+        "Non-Recyclable": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 924
+        },
+        "Organic": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 432
+        },
+        "Recyclable": {
+          "precision": 0.6237314597970336,
+          "recall": 1.0,
+          "f1": 0.7682692307692308,
+          "support": 2397
+        }
+      }
+    }
+  },
+  "gap": {
+    "macro_f1_drop": 0.12629989965666222,
+    "per_class_f1_drop": {
+      "Hazardous": 0.2659713168187744,
+      "Organic": 0.12422263681592038,
+      "Non-Recyclable": 0.0648151432388655,
+      "Recyclable": 0.0501905017530887
+    }
+  },
+  "gap_all": {
+    "macro_f1_drop": 0.14027228586296003,
+    "per_class_f1_drop": {
+      "Hazardous": 0.30135593220338985,
+      "Organic": 0.10961771453612768,
+      "Non-Recyclable": 0.10049415526783345,
+      "Recyclable": 0.049621341444489264
+    }
+  }
+}

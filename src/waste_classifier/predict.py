@@ -26,7 +26,7 @@ def predict_image(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("image")
-    parser.add_argument("--checkpoint", default="models/transfer.pt")
+    parser.add_argument("--checkpoint", default="models/transfer_large.pt")
     args = parser.parse_args()
 
     device = get_device()

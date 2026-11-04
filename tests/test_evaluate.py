@@ -1,8 +1,16 @@
 import pytest
 
-from waste_classifier.evaluate import compute_gap, compute_metrics
+from waste_classifier.evaluate import build_test_sets, compute_gap, compute_metrics
 
 CLASSES = ["a", "b"]
+
+
+def test_all_real_world_images_are_only_used_for_models_that_never_trained_on_them():
+    studio_only = {"data": {"train_domains": ["default"]}}
+    fine_tuned = {"data": {"train_domains": ["default", "real_world"]}}
+
+    assert build_test_sets(studio_only)["real_world_all"] == ("all", ["real_world"], "near_studio")
+    assert set(build_test_sets(fine_tuned)) == {"default", "real_world"}
 
 
 def test_metrics_score_a_class_that_is_never_predicted_as_zero():

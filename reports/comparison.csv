@@ -1,0 +1,6 @@
+experiment,default_macro_f1,real_world_all_macro_f1,real_world_test_macro_f1,default_acc,real_world_all_acc,real_world_test_acc,macro_f1_drop,most_affected_class
+basic_cnn,0.5924,0.4831,0.4748,0.7114,0.6482,0.6382,0.1092,Organic
+basic_cnn_strong_weights,0.4547,0.3439,0.3563,0.4405,0.3297,0.3439,0.1107,Organic
+transfer,0.9157,0.7754,0.7894,0.9405,0.8673,0.8728,0.1403,Hazardous
+transfer_large,0.9379,,0.8871,0.9544,,0.9185,0.0508,Hazardous
+transfer_real_world,0.933,,0.8513,0.9481,,0.9125,0.0817,Hazardous

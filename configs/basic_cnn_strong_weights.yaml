@@ -1,0 +1,7 @@
+# First Model A run, kept for comparison. Full class weighting made Hazardous mistakes
+# cost about 16x Recyclable mistakes, and the model over-predicted Hazardous.
+extends: basic_cnn.yaml
+experiment: basic_cnn_strong_weights
+
+train:
+  class_weight_power: 1.0

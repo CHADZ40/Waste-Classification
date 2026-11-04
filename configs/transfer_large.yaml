@@ -1,0 +1,14 @@
+# Final model for the app: a larger backbone trained on default and real_world images.
+# It was chosen on validation scores (macro F1 0.9324 vs 0.9220 for transfer_real_world).
+extends: transfer_real_world.yaml
+experiment: transfer_large
+
+model:
+  name: efficientnet_b2
+  pretrained: true
+
+train:
+  epochs: 20
+  lr: 0.0003
+  freeze_epochs: 2
+  init_checkpoint: null

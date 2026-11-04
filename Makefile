@@ -1,10 +1,11 @@
-.PHONY: install split baseline transfer finetune compare app test lint
+.PHONY: install split baseline transfer finetune final compare app test lint
 
 install:
 	pip install -e ".[dev,app]"
 
 split:
 	python -m waste_classifier.split --config configs/default.yaml
+	python -m waste_classifier.near_duplicates --config configs/default.yaml
 
 baseline:
 	python -m waste_classifier.train --config configs/basic_cnn.yaml
@@ -17,6 +18,10 @@ transfer:
 finetune:
 	python -m waste_classifier.train --config configs/transfer_real_world.yaml
 	python -m waste_classifier.evaluate --config configs/transfer_real_world.yaml
+
+final:
+	python -m waste_classifier.train --config configs/transfer_large.yaml
+	python -m waste_classifier.evaluate --config configs/transfer_large.yaml
 
 compare:
 	python -m waste_classifier.compare

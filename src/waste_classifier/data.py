@@ -27,10 +27,19 @@ def build_transforms(image_size: int, train: bool) -> T.Compose:
     return T.Compose([T.Resize(int(image_size * 1.14)), T.CenterCrop(image_size), *normalize])
 
 
-def load_subset(cfg: dict, split: str, domains: list[str]) -> pd.DataFrame:
-    """Return the manifest rows for one split, limited to the given image types."""
+def load_subset(
+    cfg: dict, split: str, domains: list[str], exclude: str | None = None
+) -> pd.DataFrame:
+    """Return the manifest rows for one split ("all" for every split) and these image types.
+
+    `exclude` names a true/false manifest column; rows where it's true are left out.
+    """
     df = pd.read_csv(cfg["data"]["manifest"])
-    subset = df[(df["split"] == split) & df["domain"].isin(domains)]
+    subset = df[df["domain"].isin(domains)]
+    if split != "all":
+        subset = subset[subset["split"] == split]
+    if exclude:
+        subset = subset[~subset[exclude]]
     if subset.empty:
         raise ValueError(f"No images for split={split!r}, domains={domains}")
     return subset.reset_index(drop=True)
@@ -55,11 +64,13 @@ class WasteDataset(Dataset):
         return image, self.class_to_idx[row["label"]]
 
 
-def build_dataloader(cfg: dict, split: str, domains: list[str]) -> DataLoader:
+def build_dataloader(
+    cfg: dict, split: str, domains: list[str], exclude: str | None = None
+) -> DataLoader:
     data = cfg["data"]
     train = split == "train"
     dataset = WasteDataset(
-        load_subset(cfg, split, domains),
+        load_subset(cfg, split, domains, exclude),
         data["raw_dir"],
         data["classes"],
         build_transforms(data["image_size"], train),
