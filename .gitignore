@@ -25,13 +25,13 @@ data/raw/*
 !data/raw/.gitkeep
 
 # Model weights
-models/*
-!models/.gitkeep
-*.pt
-*.pth
-*.ckpt
-*.onnx
-*.safetensors
+# models/*
+# !models/.gitkeep
+# *.pt
+# *.pth
+# *.ckpt
+# *.onnx
+# *.safetensors
 
 # Training runs and experiment trackers
 outputs/*
