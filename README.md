@@ -17,7 +17,8 @@ This project classifies waste photos into four categories: Hazardous, Non-Recycl
 ```text
 waste-classification/
 ├── app/
-│   └── app.py                     # Upload-a-photo web app
+│   ├── app.py                     # Upload-a-photo web app
+│   └── live_camera.py             # Live camera window with object tracking
 ├── configs/
 │   ├── class_mapping.yaml         # 30 dataset categories -> 4 classes
 │   ├── default.yaml               # Shared settings
@@ -98,9 +99,20 @@ make finetune   # Optional: Step 7, requires make transfer first
 make final      # Train and evaluate the final model
 make compare    # Write reports/comparison.csv
 make app        # Launch the upload app (requires make final first)
+make camera     # Open the live camera window
 
 python -m waste_classifier.predict path/to/image.jpg
 ```
+
+The live camera window follows the item you're showing and ignores the rest of the room:
+
+1. It learns the room for about a second when it starts, so keep items out of view until then.
+2. Only something new, or something a moving hand is holding, can be tracked. Your body is masked out.
+3. Once it locks on, the box stays with that item until it leaves.
+
+A new result appears about every 1.5 seconds, averaged over several frames, and the waste model only sees what's inside the box. MediaPipe's models download once, about 37 MB, on first run.
+
+Click any object to follow it, even one that was already in the room. Press `R` to reset and relearn the room, `1` to `5` to switch models, and `Q` or `Esc` to quit. It says "Not sure" below 60% confidence, a starting value you can change with `--min-confidence`. It's a demo only, so its results aren't part of the reported scores.
 
 Training uses CUDA or Apple Silicon (MPS) when available, and falls back to the CPU.
 

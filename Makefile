@@ -1,4 +1,4 @@
-.PHONY: install split baseline transfer finetune final compare app test lint
+.PHONY: install split baseline transfer finetune final compare app camera test lint
 
 install:
 	pip install -e ".[dev,app]"
@@ -28,6 +28,9 @@ compare:
 
 app:
 	python app/app.py
+
+camera:
+	python app/live_camera.py
 
 test:
 	pytest
