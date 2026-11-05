@@ -110,7 +110,7 @@ The live camera window follows the item you're showing and ignores the rest of t
 2. Only something new, or something a moving hand is holding, can be tracked. Your body is masked out.
 3. Once it locks on, the box stays with that item until it leaves.
 
-A new result appears about every 1.5 seconds, averaged over several frames, and the waste model only sees what's inside the box. MediaPipe's models download once, about 37 MB, on first run.
+A new result appears about every 1.5 seconds, averaged over several frames, and the waste model only sees what's inside the box. YOLO's models download once, about 31 MB, on first run. Ultralytics YOLO is licensed under AGPL-3.0, so check that license before publishing or distributing this project.
 
 Click any object to follow it, even one that was already in the room. Press `R` to reset and relearn the room, `1` to `5` to switch models, and `Q` or `Esc` to quit. It says "Not sure" below 60% confidence, a starting value you can change with `--min-confidence`. It's a demo only, so its results aren't part of the reported scores.
 

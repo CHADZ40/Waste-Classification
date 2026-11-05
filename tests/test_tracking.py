@@ -11,7 +11,7 @@ from waste_classifier.tracking import (  # noqa: E402
     ItemTracker,
     SceneModel,
     follow_box,
-    free_zones,
+    free_item,
     main_body,
     merge_boxes,
     overlap,
@@ -79,7 +79,7 @@ def test_the_tracked_item_is_never_masked_as_a_person():
     person = NO_PERSON.copy()
     person[40:170, 100:180] = 255
 
-    freed = free_zones(person, [], (480, 200, 720, 680), FRAME_SIZE)
+    freed = free_item(person, (480, 200, 720, 680), FRAME_SIZE)
 
     assert freed[100, 140] == 0
     assert freed[100, 105] == 255
@@ -97,6 +97,16 @@ def test_a_resting_hand_is_not_active_but_a_moving_one_is():
         moved = 300 + frame * 8
         active = activity.active([(moved, 500, moved + 80, 560)], frame * STEP, WIDTH)
     assert len(active) == 1
+
+
+def test_swaying_with_the_body_does_not_make_a_hand_active():
+    activity = HandActivity()
+    for frame in range(40):
+        moved = 300 + frame * 8
+        body = np.array((moved - 100.0, 300.0))
+        active = activity.active([(moved, 500, moved + 80, 560)], frame * STEP, WIDTH, body)
+
+    assert active == []
 
 
 def test_the_scene_ignores_what_was_there_and_reports_what_is_new():

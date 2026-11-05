@@ -35,7 +35,6 @@ MAIN_BODY_SHARE = 0.25
 LEARNING_MARGIN = 12  # segmentation runs small, so stay clear of a body while learning the room
 HUG_MARGIN = 8  # a new region within this distance of a body may just be the body moving
 MAX_SLIVER_SHARE = 0.025  # only regions smaller than this can be dismissed as a moving body edge
-HAND_ZONE = 1.0  # how far, in hand sizes, around a hand doesn't count as the person
 
 MIN_SCORE = 0.3
 MIN_NEW_SHARE = 0.25
@@ -44,6 +43,8 @@ LOCK_FRAMES = 6
 LOST_SECONDS = 0.45
 MOTION_THRESHOLD = 12
 MIN_MOTION_SHARE = 0.04
+NAMED_MOTION_SHARE = 0.08
+MIN_SHOWN_SCORE = 0.45
 HAND_MARGIN = 0.03
 MIN_FLOW_POINTS = 4
 MIN_HELD_NEW_SHARE = 0.1
@@ -115,7 +116,7 @@ def near(a: Box, b: Box, margin: float) -> bool:
 def main_body(person: np.ndarray) -> np.ndarray:
     """Keep the large parts of a person mask.
 
-    Selfie segmentation often marks a separate item, such as a held cup, as a second person.
+    Segmentation can mark a separate item, such as a held cup, as a second person.
     """
     count, labels, stats, _ = cv2.connectedComponentsWithStats(person)
     if count <= 2:
@@ -125,29 +126,25 @@ def main_body(person: np.ndarray) -> np.ndarray:
     return np.isin(labels, keep).astype(np.uint8) * 255
 
 
-def free_zones(
-    person: np.ndarray, hands: list[Box], item: Box | None, frame_size: tuple[int, int]
-) -> np.ndarray:
-    """Return a person mask without the tracked item or the area around active hands.
-
-    Selfie segmentation tends to count whatever someone holds as part of them.
-    """
+def free_item(person: np.ndarray, item: Box | None, frame_size: tuple[int, int]) -> np.ndarray:
+    """Return a person mask without the tracked item, so it can't be masked as part of them."""
     freed = main_body(person)
-    scale_x, scale_y = SCENE_SIZE[0] / frame_size[0], SCENE_SIZE[1] / frame_size[1]
-    zones = [
-        (x0 - (x1 - x0) * HAND_ZONE, y0 - (y1 - y0) * HAND_ZONE,
-         x1 + (x1 - x0) * HAND_ZONE, y1 + (y1 - y0) * HAND_ZONE)
-        for x0, y0, x1, y1 in hands
-    ]
-    if item is not None:
-        zones.append(item)
-    if not zones:
+    if item is None:
         return freed
     freed = freed.copy()
-    for x0, y0, x1, y1 in zones:
-        left, top = max(int(x0 * scale_x), 0), max(int(y0 * scale_y), 0)
-        freed[top : int(y1 * scale_y) + 1, left : int(x1 * scale_x) + 1] = 0
+    scale_x, scale_y = SCENE_SIZE[0] / frame_size[0], SCENE_SIZE[1] / frame_size[1]
+    left, top = max(int(item[0] * scale_x), 0), max(int(item[1] * scale_y), 0)
+    freed[top : int(item[3] * scale_y) + 1, left : int(item[2] * scale_x) + 1] = 0
     return freed
+
+
+def body_center(body: np.ndarray, frame_size: tuple[int, int]) -> np.ndarray:
+    """Return the middle of a body mask in frame pixels, or the origin if there's no body."""
+    rows, columns = np.nonzero(body)
+    if len(rows) == 0:
+        return np.zeros(2)
+    scale = np.array((frame_size[0] / SCENE_SIZE[0], frame_size[1] / SCENE_SIZE[1]))
+    return np.array((columns.mean(), rows.mean())) * scale
 
 
 def merge_boxes(boxes: list[Box], margin: float) -> list[Box]:
@@ -205,18 +202,24 @@ def share_inside(mask: np.ndarray, box: Box, scale_x: float, scale_y: float) -> 
 
 
 class HandActivity:
-    """Separates a hand showing something from one resting on a desk or lap."""
+    """Separates a hand showing something from one that's resting.
+
+    Positions are measured from the body, so swaying or leaning doesn't count as showing.
+    """
 
     def __init__(self):
         self.history = deque()
 
-    def active(self, hands: list[Box], now: float, width: int) -> list[Box]:
+    def active(
+        self, hands: list[Box], now: float, width: int, body: np.ndarray | None = None
+    ) -> list[Box]:
+        anchor = np.zeros(2) if body is None else body
         while self.history and now - self.history[0][0] > HAND_MEMORY_SECONDS:
             self.history.popleft()
         limit = HAND_ACTIVE_DISTANCE * width
         result = []
         for hand in hands:
-            center = np.array(((hand[0] + hand[2]) / 2, (hand[1] + hand[3]) / 2))
+            center = np.array(((hand[0] + hand[2]) / 2, (hand[1] + hand[3]) / 2)) - anchor
             past = [
                 np.linalg.norm(center - point) for _, points in self.history for point in points
             ]
@@ -224,7 +227,7 @@ class HandActivity:
             local = [distance for distance in past if distance < 6 * limit]
             if not local or max(local) >= limit:
                 result.append(hand)
-        points = [np.array(((h[0] + h[2]) / 2, (h[1] + h[3]) / 2)) for h in hands]
+        points = [np.array(((h[0] + h[2]) / 2, (h[1] + h[3]) / 2)) - anchor for h in hands]
         self.history.append((now, points))
         return result
 
@@ -439,14 +442,16 @@ class ItemTracker:
         scale_x, scale_y = SCENE_SIZE[0] / width, SCENE_SIZE[1] / height
         margin = HAND_MARGIN * width
 
-        def is_held(box: Box) -> bool:
-            """A hand alone isn't enough: resting hands sit next to all sorts of things."""
-            if share_inside(changed, box, scale_x, scale_y) < MIN_HELD_NEW_SHARE:
-                return False
+        def by_hand(box: Box) -> bool:
             return any(
                 near(box, hand, margin) and box_area(box) <= MAX_HELD_SIZE * box_area(hand)
                 for hand in hands
             )
+
+        def is_held(box: Box) -> bool:
+            """An unnamed region must also be new, or any patch by a moving hand would count."""
+            is_new = share_inside(changed, box, scale_x, scale_y) >= MIN_HELD_NEW_SHARE
+            return is_new and by_hand(box)
 
         found = []
         for item in detections:
@@ -455,10 +460,15 @@ class ItemTracker:
             area = (item.box[2] - item.box[0]) * (item.box[3] - item.box[1])
             if area > MAX_REGION_SHARE * width * height:
                 continue
-            held = item.name not in ROOM_OBJECTS and is_held(item.box)
+            # A named object by a moving hand counts even in front of the body, where it's masked.
+            held = item.name not in ROOM_OBJECTS and by_hand(item.box)
             is_new = share_inside(changed, item.box, scale_x, scale_y) >= MIN_NEW_SHARE
             on_person = share_inside(person, item.box, scale_x, scale_y) > 0.5
-            if held or (is_new and not on_person and item.name not in ROOM_OBJECTS):
+            moving_item = share_inside(moving, item.box, scale_x, scale_y) >= NAMED_MOTION_SHARE
+            showable = item.name not in ROOM_OBJECTS and item.score >= MIN_SHOWN_SCORE
+            if held or (is_new and not on_person and item.name not in ROOM_OBJECTS) or (
+                showable and moving_item
+            ):
                 found.append(Candidate(item.box, held, "detector"))
 
         hugging = cv2.dilate(self.body, np.ones((2 * HUG_MARGIN + 1,) * 2, np.uint8))
@@ -470,7 +480,7 @@ class ItemTracker:
             small = box_area(region) <= MAX_SLIVER_SHARE * width * height
             outline = hugging if small else self.body
             is_body = share_inside(outline, region, scale_x, scale_y) >= BODY_SHARE
-            if held or (active and not is_body):
+            if (held or active) and not is_body:
                 found.append(Candidate(region, held, "new"))
         return found
 
@@ -515,9 +525,9 @@ class ItemTracker:
         """Return the box of the tracked item, or None if nothing is being shown."""
         height, width = frame.shape[:2]
         size = (width, height)
-        hands = self.hand_activity.active(hands, now, width)
         self.body = main_body(person)
-        person = free_zones(person, hands, self.box, size)
+        hands = self.hand_activity.active(hands, now, width, body_center(self.body, size))
+        person = free_item(person, self.box, size)
         changed = self.scene.update(frame, person, self.box)
         moving = self.scene.moving
 
@@ -547,7 +557,7 @@ class ItemTracker:
         # Someone walking by can look like a new item at first, until their outline fills the box.
         scale_x, scale_y = SCENE_SIZE[0] / width, SCENE_SIZE[1] / height
         on_body = share_inside(self.body, self.box, scale_x, scale_y) >= BODY_SHARE
-        if on_body and not self.held and not self.manual and not self.named(detections):
+        if on_body and not self.manual and not self.named(detections):
             self.body_frames += 1
         else:
             self.body_frames = 0

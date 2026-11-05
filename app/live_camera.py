@@ -1,29 +1,26 @@
 """Find and classify waste live from the camera in a desktop window.
 
-MediaPipe sees objects, hands and people. The tracker uses them to follow the item being
-shown and to ignore the room. The waste model classifies what's inside the box.
+YOLO sees objects, people and wrists. The tracker uses them to follow the item being shown
+and to ignore the room. The waste model classifies what's inside the box.
 
 Click any object to follow it. Keys: 1-5 switch model, r reset, q or Esc quit.
 """
 
 import argparse
 import math
-import ssl
+import os
 import threading
 import time
-import urllib.request
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
 import certifi
 import cv2
-import mediapipe as mp
 import numpy as np
-from mediapipe.tasks import python as mp_tasks
-from mediapipe.tasks.python import vision
-from mediapipe.tasks.python.components.containers.keypoint import NormalizedKeypoint
 from PIL import Image, ImageDraw, ImageFont
+from ultralytics import YOLO
+from ultralytics.utils.downloads import attempt_download_asset
 
 from waste_classifier.model import load_checkpoint
 from waste_classifier.predict import predict_image
@@ -38,15 +35,15 @@ MODELS = {
     "Model A (first run)": "basic_cnn_strong_weights.pt",
 }
 
-MEDIAPIPE_URL = "https://storage.googleapis.com/mediapipe-models"
-DETECTOR_FILE = "efficientdet_lite0.tflite"
-DETECTOR_PATH = "object_detector/efficientdet_lite0/float16/latest"
-HANDS_FILE = "hand_landmarker.task"
-HANDS_PATH = "hand_landmarker/hand_landmarker/float16/latest"
-PEOPLE_FILE = "selfie_multiclass_256x256.tflite"
-PEOPLE_PATH = "image_segmenter/selfie_multiclass_256x256/float32/latest"
-TOUCH_FILE = "magic_touch.tflite"
-TOUCH_PATH = "interactive_segmenter/magic_touch/float32/latest"
+OBJECT_MODEL = "yolo26s-seg.pt"
+POSE_MODEL = "yolo26n-pose.pt"
+OBJECT_IMAGE_SIZE = 640
+POSE_IMAGE_SIZE = 480
+LEFT_ARM, RIGHT_ARM = (7, 9), (8, 10)  # elbow and wrist keypoints
+MIN_KEYPOINT_SCORE = 0.5
+MIN_HAND_SIZE = 50
+CLICK_CONFIDENCE = 0.1
+CLICK_BOX_SIZE = 240
 
 WINDOW = "Waste Classifier"
 NEON = (80, 255, 120)  # RGB
@@ -54,7 +51,7 @@ MUTED = (170, 178, 172)
 INK = (12, 18, 14)
 MIN_DETECTION_SCORE = 0.2
 SAMPLE_SECONDS = 0.25
-SLOW_VISION_EVERY_FRAMES = 3
+HANDS_EVERY_FRAMES = 2
 FONT_FILES = ("/System/Library/Fonts/SFNS.ttf", "/System/Library/Fonts/HelveticaNeue.ttc")
 
 
@@ -129,110 +126,94 @@ class BoxFilter:
         return tuple(self.value)
 
 
-def download_model(folder: Path, url_path: str, filename: str) -> Path:
-    """Fetch a MediaPipe model once. It's stored with the other models, outside git."""
-    path = folder / filename
-    if not path.exists():
-        print(f"Downloading {filename}...")
-        folder.mkdir(parents=True, exist_ok=True)
-        context = ssl.create_default_context(cafile=certifi.where())
-        with urllib.request.urlopen(f"{MEDIAPIPE_URL}/{url_path}/{filename}", context=context) as r:
-            path.write_bytes(r.read())
-    return path
+def hand_box(elbow: np.ndarray, wrist: np.ndarray) -> Box:
+    """Estimate a hand's box: it sits past the wrist, about half a forearm long."""
+    forearm = wrist - elbow
+    center = wrist + 0.35 * forearm
+    half = max(0.5 * float(np.linalg.norm(forearm)), MIN_HAND_SIZE) / 2 * 1.4
+    return (center[0] - half, center[1] - half, center[0] + half, center[1] + half)
+
+
+def people_mask(polygons: list[np.ndarray], frame_size: tuple[int, int]) -> np.ndarray:
+    """Draw people's outlines, given in frame pixels, on a small mask."""
+    mask = np.zeros(SCENE_SIZE[::-1], np.uint8)
+    scale = np.array((SCENE_SIZE[0] / frame_size[0], SCENE_SIZE[1] / frame_size[1]))
+    for polygon in polygons:
+        if len(polygon) >= 3:
+            cv2.fillPoly(mask, [(polygon * scale).astype(np.int32)], 255)
+    return mask
 
 
 class Vision:
-    """MediaPipe object and hand detection on RGB frames."""
+    """YOLO object, person and wrist detection on BGR frames."""
 
-    def __init__(self, models_dir: str | Path):
-        folder = Path(models_dir) / "mediapipe"
-        self.objects = vision.ObjectDetector.create_from_options(
-            vision.ObjectDetectorOptions(
-                base_options=mp_tasks.BaseOptions(
-                    model_asset_path=str(download_model(folder, DETECTOR_PATH, DETECTOR_FILE))
-                ),
-                running_mode=vision.RunningMode.IMAGE,
-                max_results=8,
-                score_threshold=MIN_DETECTION_SCORE,
+    def __init__(self, models_dir: str | Path, device: str):
+        # python.org installs of Python can't verify the one-time weights download without this.
+        os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+        folder = Path(models_dir) / "yolo"
+        folder.mkdir(parents=True, exist_ok=True)
+        self.device = device
+        self.objects = YOLO(attempt_download_asset(str(folder / OBJECT_MODEL)))
+        self.pose = YOLO(attempt_download_asset(str(folder / POSE_MODEL)))
+
+    def see(self, frame: np.ndarray) -> tuple[list[Detection], np.ndarray]:
+        """Return the objects in a frame and a small mask of the people."""
+        result = self.objects.predict(
+            frame,
+            device=self.device,
+            imgsz=OBJECT_IMAGE_SIZE,
+            conf=MIN_DETECTION_SCORE,
+            verbose=False,
+        )[0]
+        names = [result.names[int(number)] for number in result.boxes.cls.tolist()]
+        found = [
+            Detection(tuple(box), score, name)
+            for box, score, name in zip(
+                result.boxes.xyxy.tolist(), result.boxes.conf.tolist(), names, strict=True
             )
-        )
-        self.hands = vision.HandLandmarker.create_from_options(
-            vision.HandLandmarkerOptions(
-                base_options=mp_tasks.BaseOptions(
-                    model_asset_path=str(download_model(folder, HANDS_PATH, HANDS_FILE))
-                ),
-                running_mode=vision.RunningMode.VIDEO,
-                num_hands=2,
+        ]
+        outlines = result.masks.xy if result.masks is not None else []
+        polygons = [
+            polygon for polygon, name in zip(outlines, names, strict=False) if name == "person"
+        ]
+        return found, people_mask(polygons, frame.shape[1::-1])
+
+    def detect_hands(self, frame: np.ndarray) -> list[Box]:
+        result = self.pose.predict(
+            frame, device=self.device, imgsz=POSE_IMAGE_SIZE, conf=0.3, verbose=False
+        )[0]
+        if result.keypoints is None:
+            return []
+        hands = []
+        for person in result.keypoints.data.cpu().numpy():
+            for elbow, wrist in (LEFT_ARM, RIGHT_ARM):
+                if min(person[elbow, 2], person[wrist, 2]) >= MIN_KEYPOINT_SCORE:
+                    hands.append(hand_box(person[elbow, :2], person[wrist, :2]))
+        return hands
+
+    def box_at(self, frame: np.ndarray, x: int, y: int) -> Box:
+        """Return the smallest non-person object at a point, or a fixed box around it."""
+        result = self.objects.predict(
+            frame,
+            device=self.device,
+            imgsz=OBJECT_IMAGE_SIZE,
+            conf=CLICK_CONFIDENCE,
+            verbose=False,
+        )[0]
+        boxes = [
+            tuple(box)
+            for box, number in zip(
+                result.boxes.xyxy.tolist(), result.boxes.cls.tolist(), strict=True
             )
-        )
-        self.people = vision.ImageSegmenter.create_from_options(
-            vision.ImageSegmenterOptions(
-                base_options=mp_tasks.BaseOptions(
-                    model_asset_path=str(download_model(folder, PEOPLE_PATH, PEOPLE_FILE))
-                ),
-                output_category_mask=True,
-                output_confidence_masks=False,
-            )
-        )
-        self.touch = vision.InteractiveSegmenterLegacy.create_from_options(
-            vision.InteractiveSegmenterLegacyOptions(
-                base_options=mp_tasks.BaseOptions(
-                    model_asset_path=str(download_model(folder, TOUCH_PATH, TOUCH_FILE))
-                ),
-                output_category_mask=True,
-                output_confidence_masks=False,
-            )
-        )
-
-    def detect_objects(self, rgb: np.ndarray) -> list[Detection]:
-        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        found = []
-        for item in self.objects.detect(image).detections:
-            box, category = item.bounding_box, item.categories[0]
-            corners = (
-                box.origin_x,
-                box.origin_y,
-                box.origin_x + box.width,
-                box.origin_y + box.height,
-            )
-            found.append(Detection(corners, category.score, category.category_name))
-        return found
-
-    def detect_hands(self, rgb: np.ndarray, timestamp_ms: int) -> list[Box]:
-        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        height, width = rgb.shape[:2]
-        boxes = []
-        for hand in self.hands.detect_for_video(image, timestamp_ms).hand_landmarks:
-            xs, ys = [p.x * width for p in hand], [p.y * height for p in hand]
-            boxes.append((min(xs), min(ys), max(xs), max(ys)))
-        return boxes
-
-
-    def segment_people(self, rgb: np.ndarray) -> np.ndarray:
-        """Return a small mask of people: hair, skin and clothes, but not accessories."""
-        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        classes = self.people.segment(image).category_mask.numpy_view().squeeze()
-        mask = ((classes >= 1) & (classes <= 4)).astype(np.uint8) * 255
-        return cv2.resize(mask, SCENE_SIZE, interpolation=cv2.INTER_NEAREST)
-
-    def segment_at(self, rgb: np.ndarray, x: int, y: int) -> Box | None:
-        """Return the box of the object at a point, or None if nothing was found there."""
-        height, width = rgb.shape[:2]
-        region = vision.InteractiveSegmenterLegacyRegionOfInterest
-        point = region(
-            format=region.Format.KEYPOINT, keypoint=NormalizedKeypoint(x / width, y / height)
-        )
-        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-        classes = self.touch.segment(image, point).category_mask.numpy_view().squeeze()
-        mask = (classes > 0).astype(np.uint8)
-        if mask.mean() > 0.6:
-            mask = 1 - mask  # the model's foreground value isn't fixed
-        _, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
-        label = labels[y, x]
-        if label == 0:
-            return None
-        left, top, box_width, box_height, _ = stats[label]
-        return (float(left), float(top), float(left + box_width), float(top + box_height))
+            if result.names[int(number)] != "person"
+            and box[0] <= x <= box[2]
+            and box[1] <= y <= box[3]
+        ]
+        if boxes:
+            return min(boxes, key=lambda box: (box[2] - box[0]) * (box[3] - box[1]))
+        height, width = frame.shape[:2]
+        half = CLICK_BOX_SIZE / 2
+        return (max(x - half, 0), max(y - half, 0), min(x + half, width), min(y + half, height))
 
 
 class Scanner(threading.Thread):
@@ -249,11 +230,10 @@ class Scanner(threading.Thread):
         self.samples = []
         self.tracker = ItemTracker()
         self.hands, self.frames = [], 0
-        self.people = np.zeros(SCENE_SIZE[::-1], np.uint8)
         self.click_point = None
         self.want_reset = False
         self.item_number = 0
-        self.started = self.last_update = time.monotonic()
+        self.last_update = time.monotonic()
         self.last_sample = 0.0
 
     def submit(self, frame: np.ndarray) -> None:
@@ -296,31 +276,27 @@ class Scanner(threading.Thread):
     def process(
         self, frame: np.ndarray, name: str, point: tuple[int, int] | None, reset: bool
     ) -> None:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         now = time.monotonic()
         if reset:
             self.tracker.reset()
 
-        found = self.seeing.detect_objects(rgb)
+        found, people = self.seeing.see(frame)
         self.frames += 1
-        if self.frames % SLOW_VISION_EVERY_FRAMES == 1:
-            elapsed_ms = int((now - self.started) * 1000)
-            self.hands = self.seeing.detect_hands(rgb, elapsed_ms)
-            self.people = self.seeing.segment_people(rgb)
+        if self.frames % HANDS_EVERY_FRAMES == 1:
+            self.hands = self.seeing.detect_hands(frame)
 
         if point is not None:
-            chosen = self.seeing.segment_at(rgb, *point)
-            if chosen is not None:
-                self.tracker.choose(chosen, now)
+            self.tracker.choose(self.seeing.box_at(frame, *point), now)
 
-        box = self.tracker.update(frame, now, found, self.hands, self.people)
+        box = self.tracker.update(frame, now, found, self.hands, people)
 
         scores = None
         if box is not None and now - self.last_sample >= SAMPLE_SECONDS:
             model, meta = self.models[name]
-            crop = square_crop(rgb, box)
+            crop = square_crop(frame, box)
             if crop.size:
-                scores = predict_image(model, meta, Image.fromarray(crop), self.device)
+                photo = Image.fromarray(np.ascontiguousarray(crop[:, :, ::-1]))
+                scores = predict_image(model, meta, photo, self.device)
                 self.last_sample = now
 
         with self.lock:
@@ -473,7 +449,12 @@ def run(args: argparse.Namespace) -> None:
 
     camera = open_camera(args.source)
     scanner = Scanner(
-        Vision(args.models_dir), models, current, device, args.interval, args.min_confidence
+        Vision(args.models_dir, device.type),
+        models,
+        current,
+        device,
+        args.interval,
+        args.min_confidence,
     )
     scanner.start()
     cv2.namedWindow(WINDOW, cv2.WINDOW_AUTOSIZE)

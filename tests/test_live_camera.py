@@ -48,6 +48,30 @@ def test_missing_models_give_a_clear_error(tmp_path):
         live_camera.find_models(tmp_path)
 
 
+def test_hand_box_sits_past_the_wrist():
+    box = live_camera.hand_box(np.array((100.0, 300.0)), np.array((300.0, 300.0)))
+
+    assert (box[0] + box[2]) / 2 == pytest.approx(370)
+    assert (box[1] + box[3]) / 2 == pytest.approx(300)
+    assert box[2] - box[0] == pytest.approx(140)
+
+
+def test_hand_box_has_a_minimum_size():
+    box = live_camera.hand_box(np.array((100.0, 100.0)), np.array((102.0, 100.0)))
+
+    assert box[2] - box[0] == pytest.approx(live_camera.MIN_HAND_SIZE * 1.4)
+
+
+def test_people_mask_is_drawn_at_scene_size():
+    outline = np.array([(0, 0), (640, 0), (640, 720), (0, 720)], dtype=np.float32)
+
+    mask = live_camera.people_mask([outline], (WIDTH, HEIGHT))
+
+    assert mask.shape == live_camera.SCENE_SIZE[::-1]
+    assert mask[90, 80] == 255
+    assert mask[90, 240] == 0
+
+
 def test_crop_is_square_and_stays_inside_the_frame():
     frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
 

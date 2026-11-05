@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-app = ["certifi", "gradio", "mediapipe"]
+app = ["certifi", "gradio", "ultralytics"]
 dev = ["jupyter", "pytest", "ruff"]
 
 [tool.setuptools.packages.find]
